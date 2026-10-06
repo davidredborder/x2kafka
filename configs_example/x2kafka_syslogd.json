@@ -1,0 +1,27 @@
+{
+  "brokers": ["127.0.0.1:9092"],
+  "topic": "rb_syslog",
+  "async": true,
+  "listeners": [
+    {
+      "name": "rsyslog-udp-listener",
+      "proto": "syslog_udp",
+      "bind": "0.0.0.0",
+      "port": 514,
+      "mode": "syslog",
+      "enrichment": {
+        "collector": "syslogd_udp"
+      }
+    },
+    {
+      "name": "rsyslog-tcp-listener",
+      "proto": "syslog_tcp",
+      "bind": "0.0.0.0",
+      "port": 1514,
+      "mode": "syslog",
+      "enrichment": {
+        "collector": "syslogd_tcp"
+      }
+    }
+  ]
+}

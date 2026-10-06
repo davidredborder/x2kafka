@@ -1,0 +1,10 @@
+github.com/golangsnmp/gomib v0.13.2 h1:6PxzKt34PQCWwppZhDBi5c1uFQ0Ve70RpVYnqKwddWQ=
+github.com/golangsnmp/gomib v0.13.2/go.mod h1:kMhPC1hIlPUf2glrzy0uQV17TBQtwsm5zVuRW/emGbk=
+github.com/gosnmp/gosnmp v1.45.0 h1:dc3Y/F7qhY8v+Eeb+3Hq+AnSBxQ8mGbwoHEPgWZRkxI=
+github.com/gosnmp/gosnmp v1.45.0/go.mod h1:LWPVcDKeRsiioQGeITGTQha4mdlx9lgmRmXz6zGINQ4=
+github.com/klauspost/compress v1.15.9 h1:wKRjX6JRtDdrE9qwa4b/Cip7ACOshUI4smpCQanqjSY=
+github.com/klauspost/compress v1.15.9/go.mod h1:PhcZ0MbTNciWF3rruxRgKxI5NkcHHrHUDtV4Yw2GlzU=
+github.com/pierrec/lz4/v4 v4.1.15 h1:MO0/ucJhngq7299dKLwIMtgTfbkoSPF6AoMYDd8Q4q0=
+github.com/pierrec/lz4/v4 v4.1.15/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
+github.com/segmentio/kafka-go v0.4.51 h1:JgDPPG75tC1rWIS2Me6MwcvXJ6f49UQ4HjAOef71Hno=
+github.com/segmentio/kafka-go v0.4.51/go.mod h1:Y1gn60kzLEEaW28YshXyk2+VCUKbJ3Qr6DrnT3i4+9E=

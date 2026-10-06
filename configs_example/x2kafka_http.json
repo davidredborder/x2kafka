@@ -1,0 +1,22 @@
+{
+  "brokers": ["127.0.0.1:9092"],
+  "topic": "rb_web_events",
+  "client_id": "x2kafka-http-collector",
+  "async": true,
+  "stats_port": 9090,
+  "stats_bind": "0.0.0.0",
+  "listeners": [
+    {
+      "name": "webhooks-endpoint",
+      "proto": "http",
+      "bind": "0.0.0.0",
+      "port": 8080,
+      "mode": "json",
+      "enrichment": {
+        "source_type": "webhook",
+        "datacenter": "eu-west-1",
+        "environment": "production"
+      }
+    }
+  ]
+}

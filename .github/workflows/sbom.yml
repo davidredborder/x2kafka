@@ -1,0 +1,35 @@
+name: Generate and Scan SBOM
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate SBOM
+        run: |
+          VERSION=$(cat ./VERSION 2>/dev/null || echo "latest")
+          syft scan dir:. --source-name x2kafka --source-version "$VERSION" -o spdx-json=x2kafka-sbom.spdx.json
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin || \
+          (curl -sL -H "User-Agent: Mozilla/5.0" https://github.com/aquasecurity/trivy/releases/download/v0.50.0/trivy_0.50.0_Linux-64bit.tar.gz | tar -xz -C /tmp && sudo mv /tmp/trivy /usr/local/bin/trivy)
+
+      - name: Scan SBOM with Trivy
+        run: |
+          trivy sbom \
+            --exit-code 0 \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            x2kafka-sbom.spdx.json

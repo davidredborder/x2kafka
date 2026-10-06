@@ -1,0 +1,32 @@
+# Binaries and build output
+bin/
+*.exe
+*.exe;
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# RPM packaging outputs
+packaging/rpm/SOURCES/
+packaging/rpm/pkgs/
+packaging/rpm/build.log
+packaging/rpm/root.log
+packaging/rpm/state.log
+packaging/rpm/installed_pkgs
+packaging/rpm/*.rpm
+packaging/rpm/*.tar.gz
+
+# Coverage and profile outputs
+*.coverprofile
+coverage.out
+coverage.html
+*.spdx.json
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

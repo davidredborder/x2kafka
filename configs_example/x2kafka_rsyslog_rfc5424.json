@@ -1,0 +1,38 @@
+{
+  "brokers": ["kafka.service:9092"],
+  "topic": "rb_syslog",
+  "client_id": "x2kafka-syslog-collector",
+  "async": true,
+  "listeners": [
+    {
+      "name": "rsyslog-rfc5424-receiver",
+      "proto": "syslog_udp",
+      "bind": "0.0.0.0",
+      "port": 514,
+      "mode": "syslog",
+      "enrichment_rules": [
+        {
+          "match_key": "fromhost_ip",
+          "match_value": "10.1.33.158",
+          "topic": "rb_vault",
+          "enrichment": {
+            "sensor_ip": "10.1.33.158",
+            "sensor_name": "vaultD",
+            "sensor_uuid": "a559d67c-b4f4-49a0-93a1-12df8f63341e"
+          }
+        },
+        {
+          "match_key": "fromhost_ip",
+          "match_value": "127.0.0.1",
+          "contains": ["ALERT", "RULE"],
+          "topic": "rb_vault",
+          "enrichment": {
+            "sensor_ip": "127.0.0.1",
+            "sensor_name": "CEP",
+            "sensor_uuid": "8c125069-4c27-42a4-9a33-1f377385c485"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "brokers": ["127.0.0.1:9092"],
+  "topic": "rb_snmptraps",
+  "async": true,
+  "mib_dirs": [
+    "/usr/share/snmp/mibs",
+    "/etc/x2kafka/mibs"
+  ],
+  "listeners": [
+    {
+      "name": "direct-snmptrap-udp-listener",
+      "proto": "snmptrap_udp",
+      "bind": "0.0.0.0",
+      "port": 162,
+      "topic": "rb_snmptraps",
+      "enrichment_rules": [
+        {
+          "match_key": "fromhost_ip",
+          "match_value": "192.168.10.1",
+          "enrichment": {
+            "datacenter": "DC1",
+            "switch_role": "core_switch"
+          }
+        }
+      ],
+      "enrichment": {
+        "source_type": "snmptrap_direct"
+      }
+    }
+  ]
+}

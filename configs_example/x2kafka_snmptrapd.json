@@ -1,0 +1,39 @@
+{
+  "brokers": ["127.0.0.1:9092"],
+  "topic": "rb_snmptraps",
+  "async": true,
+  "listeners": [
+    {
+      "name": "snmptrapd-fifo-input",
+      "proto": "fifo",
+      "path": "/var/run/snmptrap.fifo",
+      "mode": "json",
+      "enrichment_key": "sensor_uuid",
+      "enrichment_map": {
+        "uuid-sensor-site-alpha": {
+          "sensor_id": 101,
+          "sensor_name": "Trap Collector Alpha",
+          "site": "Alpha"
+        },
+        "uuid-sensor-site-beta": {
+          "sensor_id": 102,
+          "sensor_name": "Trap Collector Beta",
+          "site": "Beta"
+        }
+      },
+      "enrichment_rules": [
+        {
+          "match_key": "source_addr",
+          "match_value": "10.0.10.5",
+          "enrichment": {
+            "router": "core-gw-01",
+            "priority": "high"
+          }
+        }
+      ],
+      "enrichment": {
+        "source": "snmptrapd"
+      }
+    }
+  ]
+}
