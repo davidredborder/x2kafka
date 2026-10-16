@@ -1,16 +1,18 @@
-# x2kafka
+# x2kafka & kafka2x
 
-`x2kafka` is a high-performance, multi-protocol collector service designed to convert data from UNIX domain sockets, named pipes (FIFOs), Syslog (UDP/TCP/UNIX), Direct SNMP Traps, and HTTP(S) endpoints (including `http2k` / `k2http`) into Apache Kafka topics.
+This repository provides two high-performance streaming daemons for the redBorder platform:
 
-It is general, fully configurable via JSON, and compatible with `snmptrapd`, direct SNMP trap reception, `syslogd` / `rsyslog`, local UNIX domain sockets, REST APIs, or any custom tool exporting telemetry data.
+1. **`x2kafka`** (Ingress): Collects data events from UNIX domain sockets, named pipes (FIFOs), Syslog (UDP/TCP/UNIX), Direct SNMP Traps, and HTTP(S) endpoints into Apache Kafka topics.
+2. **`kafka2x`** (Egress): Consumes events from Kafka topics and reliably forwards them in batches to remote HTTP(S) REST bulk endpoints with compression, framing, and automatic topic-qualified routing (replaces legacy `k2http` / `rbforwarder`).
 
 ---
 
 ## Key Features
 
+### `x2kafka` (Ingress to Kafka)
 - **Multi-Protocol Syslog Listener (`proto: "syslog"`, `"syslog_udp"`, `"syslog_tcp"`, `"syslog_unix"`)**: Parses RFC 3164 (BSD syslog) and RFC 5424 (IETF syslog) messages matching rsyslog schema fields. Specifying `"proto": "syslog"` automatically binds both UDP and TCP on the designated port.
-- **HTTP / HTTPS & `http2k` / `k2http` Collector**:
-  - **Transparent HTTP Decompression**: Automatically decompresses incoming GZIP, ZLIB, and raw DEFLATE payloads (supporting `k2http` compressed batches).
+- **HTTP / HTTPS & `http2k` Collector**:
+  - **Transparent HTTP Decompression**: Automatically decompresses incoming GZIP, ZLIB, and raw DEFLATE payloads (supporting `kafka2x` / `k2http` compressed batches).
   - **Multi-Format Bulk Support**: Handles single JSON records, line-delimited records (NDJSON), JSON arrays (`[...]`), and concatenated JSON objects (`{...}{...}`).
   - **REST Path Routing & Sensor Extraction**: Parses REST URIs like `POST /rbdata/<sensor_uuid>/<topic>` (e.g., `POST /rbdata/bd2fe2c3-d0ff-4c27-aef9-122b698239b9/rb_flow`), extracting `sensor_uuid`, `proxy_uuid`, and the target Kafka topic dynamically.
 - **UNIX Domain Sockets**: Supports both `unix` (Stream, SOCK_STREAM) and `unixgram` (Datagram, SOCK_DGRAM) sockets.
@@ -19,16 +21,22 @@ It is general, fully configurable via JSON, and compatible with `snmptrapd`, dir
 - **IP Security & Subnet Filtering**: Granular IP allowlisting (`allowed_ips`) and blacklisting (`blacklist_ips`) supporting single IPs and CIDR subnet blocks globally or per listener.
 - **Message Splitting & Field Extraction**: Extract structured data from raw log strings using Key-Value parsing (`kv_extract`), CEF security headers (`cef_extract`), or custom named Regex patterns (`regex_patterns`).
 - **Schema Standardization**: Map vendor-specific log keys (e.g., `src`, `srcip`, `source_ip`) to unified redBorder schema keys (`src_ip`, `dst_ip`, `src_port`, `dst_port`, `transport`, `username`) automatically via `schema_standardization`.
-- **Per-Listener & Per-Rule Topic Routing**: Route incoming messages to dedicated Kafka topics per listener, per REST path, or per matched rule.
-- **Dynamic & Static JSON Enrichment**: Flexible per-sensor lookup maps (`enrichment_map`) and conditional rules engine (`contains`, `match_key`) for tagging JSON payloads across all protocols.
-- **Unix Timestamp Standard**: Output records contain `timestamp` set to standard Unix timestamp seconds (int64), identical to `redborder-monitor`.
-- **High Throughput Scaling**: Parallel socket reader workers, configurable CPU worker pool, 8MB OS socket receive buffers, and LZ4 compression.
-- **Graceful Shutdown & Hot Reload**: Supports `SIGHUP` signal to reload configuration without stopping the daemon, and clean channel draining during shutdown.
-- **Telemetry & Debugging**: Built-in HTTP `/stats` endpoint for monitoring throughput and memory usage, with verbose debug mode (`-d` / `"debug": true`).
+- **Dynamic & Static JSON Enrichment**: Flexible per-sensor lookup maps (`enrichment_map`) and conditional rules engine (`contains`, `match_key`) for tagging JSON payloads.
+
+### `kafka2x` (Egress from Kafka to HTTP/REST)
+- **Consumer Group Engine**: Subscribes to multiple Kafka topics (e.g. `rb_flow`, `rb_monitor`, `rb_syslog`, `rb_trap`) with automatic partition rebalancing and fault tolerance.
+- **Topic-Qualified URL Dispatch**: Automatically appends the source Kafka topic to the destination REST path (e.g., posting to `/rbdata/<sensor_uuid>` automatically dispatches batches to `/rbdata/<sensor_uuid>/rb_flow`, `/rbdata/<sensor_uuid>/rb_monitor`, etc.).
+- **RFC-Compliant Compression**: Clean stream compression supporting `"gzip"`, `"zlib"`, `"deflate"`, or `"none"` (guarantees valid Adler-32 / CRC32 checksum footers).
+- **Framing Modes**:
+  - `"newline"`: Standard newline-delimited JSON (NDJSON / `\n`).
+  - `"concatenated"`: RedBorder streaming concatenated JSON (`{...}{...}`).
+  - `"json_array"`: Standard JSON array bulk (`[ {...}, {...} ]`).
+- **At-Least-Once Delivery**: Kafka consumer offsets are only committed after a successful HTTP 2xx response from the remote endpoint. If the destination is temporarily unavailable, workers retry with configurable backoff.
+- **HTTP Connection Pooling**: Tuned `http.Transport` with persistent connection reuse and TLS verification settings.
 
 ---
 
-## IP Security & Access Control (`allowed_ips` & `blacklist_ips`)
+## IP Security & Access Control (`x2kafka`)
 
 `x2kafka` supports granular IP address and CIDR subnet filtering to restrict data ingestion to authorized senders:
 
@@ -49,85 +57,11 @@ It is general, fully configurable via JSON, and compatible with `snmptrapd`, dir
 }
 ```
 
-- **Allowlisting (`allowed_ips`)**: Accepts single IPs (`"192.168.10.1"`) or CIDR subnets (`"10.1.33.0/24"`). If specified, any sender IP outside these ranges is immediately dropped.
-- **Blacklisting (`blacklist_ips`)**: Explicitly blocks designated IPs or subnets (e.g., `"192.168.101.3"`).
-- Can be defined **globally** in the root configuration or **per-listener** (e.g. restricting SNMP traps to network management subnets).
-
 ---
 
-## Message Splitting, Field Extraction & Schema Standardization
+## Configuration
 
-`x2kafka` supports extracting key-value fields from unstructured syslog text and mapping vendor-specific keys to a normalized schema:
-
-```json
-{
-  "listeners": [
-    {
-      "name": "firewall-syslog-collector",
-      "proto": "syslog",
-      "bind": "0.0.0.0",
-      "port": 514,
-      "mode": "syslog",
-      "kv_extract": true,
-      "cef_extract": true,
-      "schema_standardization": true,
-      "regex_patterns": [
-        "user=(?P<custom_user>\\S+)"
-      ]
-    }
-  ]
-}
-```
-
-- **`kv_extract: true`**: Automatically parses `key=value` or `key="value"` pairs (e.g. `srcip=192.168.1.50 dstip=10.0.0.1 action=deny`).
-- **`cef_extract: true`**: Parses Common Event Format security headers (`CEF:0|Vendor|Product|...|src=10.0.0.1 dst=10.0.0.2`).
-- **`regex_patterns`**: Uses named Go regular expression capture groups to extract custom payload fields (`(?P<fieldname>pattern)`).
-- **`schema_standardization: true`**: Maps raw vendor keys into unified canonical schema fields:
-  - `src`, `srcip`, `source_ip` $\rightarrow$ **`src_ip`**
-  - `dst`, `dstip`, `destination_ip` $\rightarrow$ **`dst_ip`**
-  - `spt`, `srcport` $\rightarrow$ **`src_port`**
-  - `dpt`, `dstport` $\rightarrow$ **`dst_port`**
-  - `proto`, `protocol` $\rightarrow$ **`transport`**
-  - `user`, `usr`, `suser` $\rightarrow$ **`username`**
-
----
-
-## SNMP MIB Auto-Discovery & Custom MIB Directories (`mib_dirs`)
-
-`x2kafka` includes a built-in MIB engine for translating numeric SNMP trap OIDs (e.g., `.1.3.6.1.4.1.9.9.43.1.1.1.0`) into human-readable MIB variable names.
-
-You can configure custom MIB directory locations in `config.json` via `"mib_dirs"`, matching redBorder platform standards:
-
-```json
-{
-  "brokers": ["kafka.service:9092"],
-  "topic": "rb_trap",
-  "mib_dirs": [
-    "/usr/share/snmp/mibs",
-    "/var/lib/snmp/mibs",
-    "/etc/redborder/mibs"
-  ],
-  "listeners": [
-    {
-      "name": "snmptrap-listener",
-      "proto": "snmptrap",
-      "bind": "0.0.0.0",
-      "port": 162,
-      "topic": "rb_trap"
-    }
-  ]
-}
-```
-
-- **`mib_dirs`**: Array of directory paths containing vendor `.mib` or `.my` files.
-- **System Fallback**: If `mib_dirs` is omitted, `x2kafka` automatically scans default Linux system locations (`/usr/share/snmp/mibs`).
-- **Dynamic Resolution**: As traps arrive over UDP/TCP port 162, numeric OIDs are automatically replaced with MIB names and flattened into the output JSON.
-
----
-
-## Complete Example Configuration (`config.syslog.json`)
-
-Below is a complete, production-ready configuration combining Syslog (UDP & TCP), `http2k` REST endpoint, per-sensor dynamic enrichment, and schema standardization:
+### 1. `x2kafka` Ingress Config (`/etc/x2kafka/config.json`)
 
 ```json
 {
@@ -137,6 +71,8 @@ Below is a complete, production-ready configuration combining Syslog (UDP & TCP)
   "num_workers": 16,
   "channel_buffer_size": 50000,
   "socket_buffer_bytes": 8388608,
+  "stats_port": 7979,
+  "stats_socket": "/run/x2kafka/x2kafka.sock",
   "listeners": [
     {
       "name": "syslog-collector",
@@ -144,34 +80,10 @@ Below is a complete, production-ready configuration combining Syslog (UDP & TCP)
       "bind": "0.0.0.0",
       "port": 514,
       "mode": "syslog",
+      "topic": "rb_syslog",
       "kv_extract": true,
       "cef_extract": true,
-      "schema_standardization": true,
-      "enrichment_rules": [
-        {
-          "match_key": "fromhost_ip",
-          "match_value": "10.1.33.158",
-          "topic": "rb_vault",
-          "enrichment": {
-            "sensor_ip": "10.1.33.158",
-            "sensor_name": "vaultD",
-            "sensor_uuid": "e90902da-cec3-4020-9eaf-708ee32f86ac"
-          }
-        },
-        {
-          "match_fields": {
-            "fromhost_ip": "127.0.0.1",
-            "app_name": "cep"
-          },
-          "contains": ["ALERT", "RULE"],
-          "topic": "rb_vault",
-          "enrichment": {
-            "sensor_ip": "127.0.0.1",
-            "sensor_name": "CEP",
-            "sensor_uuid": "f6eb42c9-7003-49f3-9a3b-4da6211d5c37"
-          }
-        }
-      ]
+      "schema_standardization": true
     },
     {
       "name": "http2k-listener",
@@ -194,134 +106,130 @@ Below is a complete, production-ready configuration combining Syslog (UDP & TCP)
       "proto": "snmptrap",
       "bind": "0.0.0.0",
       "port": 162,
-      "topic": "rb_trap",
-      "allowed_ips": ["10.1.33.158", "127.0.0.1"],
-      "enrichment_rules": [
-        {
-          "match_key": "source_addr",
-          "match_value": "10.1.33.158",
-          "topic": "rb_trap",
-          "enrichment": {
-            "sensor_ip": "10.1.33.158",
-            "sensor_name": "trapD",
-            "sensor_uuid": "e90902da-cec3-4020-9eaf-708ee32f86ac"
-          }
-        }
-      ]
+      "topic": "rb_trap"
     }
   ]
 }
 ```
 
----
+### 2. `kafka2x` Egress Config (`/etc/kafka2x/config.json`)
 
-## Estimated Performance & Throughput Benchmarks
+Supports both JSON and legacy YAML format:
 
-Tested on a standard 8-core CPU server with 16 GB RAM and LZ4 compression enabled:
-
-| Input Protocol | Estimated Throughput | Memory (RAM) Usage | Key Performance Factor |
-| :--- | :--- | :--- | :--- |
-| **Direct UDP Syslog (`syslog_udp`)** | **80,000 – 120,000 events / sec** | ~35 MB – 65 MB | 8 MB Kernel socket receive buffer (`SO_RCVBUF`) + Parallel socket workers. |
-| **Direct SNMP Traps (`snmptrap_udp`)** | **50,000 – 90,000 traps / sec** | ~40 MB – 70 MB | Concurrent Varbind decoding & in-memory `gomib` OID resolution. |
-| **HTTP Bulk Array / Deflate (`http` POST)** | **150,000 – 250,000 events / sec** | ~30 MB – 60 MB | Transparent `GZIP`/`Deflate` streaming + Concatenated JSON tokenizer. |
-| **UNIX Socket / FIFO (`unix` / `fifo`)** | **100,000 – 180,000 events / sec** | ~25 MB – 50 MB | Zero network stack overhead; in-memory `memcpy` performance. |
-
----
-
-## CLI Usage & Live Statistics
-
-`x2kafka` provides command-line flags to inspect live statistics, run in debug mode, or reload configuration:
-
-```bash
-# Fetch and print live JSON statistics from the running daemon:
-x2kafka -stats -c /etc/x2kafka/config.json
-
-# Run daemon in verbose debug mode:
-x2kafka -d -c /etc/x2kafka/config.json
-
-# Show version:
-x2kafka -v
-```
-
-### Fetching Live Stats via UNIX Socket, HTTP REST API, or CLI:
-
-`x2kafka` supports querying status via UNIX domain socket (IPC) matching `redborder-monitor`, as well as via HTTP REST API:
-
-```bash
-# Query via CLI flag (auto-detects socket or HTTP stats port):
-x2kafka -stats -c /etc/x2kafka/config.json
-
-# Query via UNIX Domain Socket (redborder-monitor IPC protocol):
-echo "stats" | nc -U /run/x2kafka/x2kafka.sock
-
-# Query via UNIX Socket HTTP GET:
-curl --unix-socket /run/x2kafka/x2kafka.sock http://localhost/stats
-
-# Query via HTTP REST API port:
-curl http://127.0.0.1:7979/stats
-```
-
-Example JSON response:
 ```json
 {
-  "uptime_seconds": 1420,
-  "messages_received": 542910,
-  "messages_sent_kafka": 542910,
-  "messages_failed_kafka": 0,
-  "bytes_received": 148291024,
-  "bytes_sent_kafka": 159201948,
-  "alloc_bytes": 14920184,
-  "sys_bytes": 35201928,
-  "num_gc": 42,
-  "listeners": [
-    {
-      "name": "syslog-collector-udp",
-      "proto": "syslog_udp",
-      "messages_received": 210000,
-      "bytes_received": 42000000,
-      "last_message_timestamp_ms": 1790619568123,
-      "error_count": 0
-    },
-    {
-      "name": "snmptrap-listener-udp",
-      "proto": "snmptrap_udp",
-      "messages_received": 4500,
-      "bytes_received": 950000,
-      "last_message_timestamp_ms": 1790619568150,
-      "error_count": 0
-    }
-  ]
+  "debug": false,
+  "kafka": {
+    "brokers": ["kafka.service:9092"],
+    "group_id": "kafka2x-http-forwarder",
+    "topics": [
+      "rb_flow",
+      "rb_monitor",
+      "rb_syslog",
+      "rb_trap"
+    ]
+  },
+  "pipeline": {
+    "workers": 2,
+    "batch_size": 1000,
+    "timeout_ms": 100,
+    "retries": 3,
+    "backoff_sec": 2
+  },
+  "http": {
+    "url": "https://http2k.redborder.cluster/rbdata/938c7905-807e-4b8f-b488-70d525ac933b",
+    "method": "POST",
+    "framing": "newline",
+    "compression": "gzip",
+    "insecure": false,
+    "timeout": "15s"
+  },
+  "stats_port": 7989,
+  "stats_socket": "/run/kafka2x/kafka2x.sock"
 }
 ```
 
 ---
 
-## Installation & Build
+## CLI Usage & Monitoring
 
+Both daemons offer CLI commands to query stats and run diagnostics:
+
+### `x2kafka`
+```bash
+# Query live stats via UNIX socket or HTTP:
+x2kafka -stats -c /etc/x2kafka/config.json
+
+# Query stats directly with curl or netcat:
+curl --unix-socket /run/x2kafka/x2kafka.sock http://localhost/stats
+curl http://127.0.0.1:7979/stats
+echo "stats" | nc -U /run/x2kafka/x2kafka.sock
+
+# Run in debug mode:
+x2kafka -d -c /etc/x2kafka/config.json
+```
+
+### `kafka2x`
+```bash
+# Query live stats via UNIX socket or HTTP:
+kafka2x -stats -c /etc/kafka2x/config.json
+
+# Query stats directly:
+curl --unix-socket /run/kafka2x/kafka2x.sock http://localhost/stats
+curl http://127.0.0.1:7989/stats
+echo "stats" | nc -U /run/kafka2x/kafka2x.sock
+
+# Run in debug mode:
+kafka2x -d -c /etc/kafka2x/config.json
+```
+
+---
+
+## Build & Test
+
+Build both binaries into `bin/`:
 ```bash
 make build
 ```
 
-The resulting binary will be placed in `bin/x2kafka`.
-
-To run tests:
+Run test suite across all packages:
 ```bash
 make test
 ```
 
-To install:
+Code linting and vetting:
 ```bash
-sudo make install
+make lint
 ```
 
 ---
 
-## Service Management
+## Packaging (Separate RPMs)
 
-A systemd unit file is provided under `resources/systemd/x2kafka.service`.
+Building the RPM produces two distinct packages:
+1. `x2kafka-<version>-<release>.x86_64.rpm` (Daemon binary `/usr/bin/x2kafka`, `/etc/x2kafka/config.json`, `x2kafka.service`)
+2. `kafka2x-<version>-<release>.x86_64.rpm` (Daemon binary `/usr/bin/kafka2x`, `/etc/kafka2x/config.json`, `kafka2x.service`)
 
+Build packages using mock:
 ```bash
-sudo cp resources/systemd/x2kafka.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now x2kafka
+make rpm
 ```
+
+---
+
+## Systemd Service Management
+
+Each daemon has its own isolated systemd service:
+
+### Start & Enable `x2kafka`
+```bash
+sudo systemctl enable --now x2kafka
+sudo systemctl status x2kafka
+```
+
+### Start & Enable `kafka2x`
+```bash
+sudo systemctl enable --now kafka2x
+sudo systemctl status kafka2x
+```
+
