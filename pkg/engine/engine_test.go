@@ -36,7 +36,10 @@ func TestPerListenerTopicRouting(t *testing.T) {
 		},
 	}
 
-	p, err := kafka.NewProducer(cfg)
+	p, err := kafka.NewProducer(kafka.ProducerConfig{
+		Brokers: cfg.Brokers,
+		Topic:   cfg.Topic,
+	})
 	if err != nil {
 		t.Fatalf("Failed to create producer: %v", err)
 	}

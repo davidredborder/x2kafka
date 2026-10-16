@@ -82,6 +82,11 @@ func IncMessagesSentKafka(byteCount int) {
 	atomic.AddInt64(&bytesSentKafka, int64(byteCount))
 }
 
+func AddMessagesSentKafka(msgCount, byteCount int64) {
+	atomic.AddInt64(&messagesSentKafka, msgCount)
+	atomic.AddInt64(&bytesSentKafka, byteCount)
+}
+
 func IncMessagesFailedKafka() {
 	atomic.AddInt64(&messagesFailedKafka, 1)
 }

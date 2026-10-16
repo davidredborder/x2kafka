@@ -38,7 +38,16 @@ type Engine struct {
 func NewEngine(cfg *config.Config) (*Engine, error) {
 	_ = mib.InitMIBs(cfg.MibDirs)
 
-	producer, err := kafka.NewProducer(cfg)
+	producerCfg := kafka.ProducerConfig{
+		Brokers:        cfg.Brokers,
+		Topic:          cfg.Topic,
+		BatchSize:      cfg.BatchSize,
+		BatchTimeoutMS: cfg.BatchTimeoutMS,
+		Async:          cfg.Async,
+		Compression:    cfg.Compression,
+	}
+
+	producer, err := kafka.NewProducer(producerCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka producer: %w", err)
 	}

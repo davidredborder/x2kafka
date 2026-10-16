@@ -1,7 +1,9 @@
 .PHONY: all build clean test lint rpm srpm distclean
 
 BINARY_NAME=x2kafka
+EGRESS_BINARY_NAME=kafka2x
 BIN=bin/$(BINARY_NAME)
+EGRESS_BIN=bin/$(EGRESS_BINARY_NAME)
 VERSION?= $(shell cat VERSION 2>/dev/null || git describe --abbrev=6 --tags HEAD --always 2>/dev/null || echo "1.0.0")
 GIT_REVISION:= $(shell git describe --abbrev=6 --dirty --tags --always 2>/dev/null || echo "dev")
 
@@ -10,6 +12,7 @@ all: build
 build:
 	@mkdir -p bin
 	go build -ldflags "-X main.version=$(VERSION) -X main.revision=$(GIT_REVISION)" -o $(BIN) ./cmd/x2kafka
+	go build -ldflags "-X main.version=$(VERSION) -X main.revision=$(GIT_REVISION)" -o $(EGRESS_BIN) ./cmd/kafka2x
 
 clean:
 	rm -rf bin/

@@ -1,0 +1,33 @@
+{
+  "debug": false,
+  "kafka": {
+    "brokers": [
+      "localhost:9092"
+    ],
+    "group_id": "kafka2x-http-forwarder",
+    "topics": [
+      "rb_flow",
+      "rb_monitor",
+      "rb_syslog",
+      "rb_trap"
+    ]
+  },
+  "pipeline": {
+    "workers": 2,
+    "batch_size": 1000,
+    "timeout_ms": 100,
+    "retries": 3,
+    "backoff_sec": 2
+  },
+  "http": {
+    "url": "http://127.0.0.1:8888/bulk",
+    "method": "POST",
+    "framing": "newline",
+    "compression": "gzip",
+    "insecure": false,
+    "timeout": "15s"
+  },
+  "stats_port": 7989,
+  "stats_bind": "127.0.0.1",
+  "stats_socket": "/run/kafka2x/kafka2x.sock"
+}

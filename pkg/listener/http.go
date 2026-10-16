@@ -126,79 +126,31 @@ func (h *HTTPListener) handleRequest(w http.ResponseWriter, r *http.Request, msg
 		return
 	}
 
-	// Decompress gzip / zlib compressed payloads (via Content-Encoding header or magic bytes)
+	// Decompress gzip / zlib / deflate payloads (via Content-Encoding header or magic bytes)
 	contentEncoding := strings.ToLower(r.Header.Get("Content-Encoding"))
 	isGzip := contentEncoding == "gzip" || (len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b)
-	isDeflate := contentEncoding == "deflate" || contentEncoding == "zlib" || (len(body) >= 2 && body[0] == 0x78 && (body[1] == 0x9c || body[1] == 0x01 || body[1] == 0xda || body[1] == 0x5e))
-
-	log.Printf("[HTTP DEBUG] Request URL: %s, Content-Encoding: %q, Content-Length: %d, FirstBytes: %x",
-		r.URL.Path, contentEncoding, len(body), body[:min(32, len(body))])
+	isDeflate := contentEncoding == "deflate" || contentEncoding == "zlib" || (len(body) >= 2 && body[0] == 0x78)
 
 	var decompressed []byte
-
 	if isGzip {
-		gzReader, err := gzip.NewReader(bytes.NewReader(body))
-		if err == nil {
-			d, _ := io.ReadAll(gzReader)
-			if len(d) > 0 {
-				decompressed = d
-			}
+		if gzReader, err := gzip.NewReader(bytes.NewReader(body)); err == nil {
+			decompressed, _ = io.ReadAll(gzReader)
 			_ = gzReader.Close()
 		}
 	} else if isDeflate {
-		// 1. Try zlib.NewReader (rbforwarder uses zlib.NewWriter + Flush(), which triggers EOF error on ReadAll)
-		zReader, err := zlib.NewReader(bytes.NewReader(body))
-		if err == nil {
-			d, _ := io.ReadAll(zReader)
-			if len(d) > 0 {
-				decompressed = d
-			}
-			_ = zReader.Close()
-		}
-		// 2. Try flate.NewReader (raw deflate without zlib wrapper)
-		if len(decompressed) == 0 {
-			fReader := flate.NewReader(bytes.NewReader(body))
-			d, _ := io.ReadAll(fReader)
-			if len(d) > 0 {
-				decompressed = d
-			}
-			_ = fReader.Close()
-		}
-	}
-
-	// Fallback check: if payload is not plain JSON ('{' or '[') and no compression header was detected, force attempt ZLIB / GZIP / FLATE decompression
-	if len(decompressed) == 0 && len(body) > 0 && body[0] != '{' && body[0] != '[' {
 		if zReader, err := zlib.NewReader(bytes.NewReader(body)); err == nil {
-			d, _ := io.ReadAll(zReader)
-			if len(d) > 0 {
-				decompressed = d
-			}
+			decompressed, _ = io.ReadAll(zReader)
 			_ = zReader.Close()
-		}
-		if len(decompressed) == 0 {
-			if gzReader, err := gzip.NewReader(bytes.NewReader(body)); err == nil {
-				d, _ := io.ReadAll(gzReader)
-				if len(d) > 0 {
-					decompressed = d
-				}
-				_ = gzReader.Close()
-			}
-		}
-		if len(decompressed) == 0 {
+		} else {
+			// Fallback to raw RFC 1951 deflate
 			fReader := flate.NewReader(bytes.NewReader(body))
-			d, _ := io.ReadAll(fReader)
-			if len(d) > 0 {
-				decompressed = d
-			}
+			decompressed, _ = io.ReadAll(fReader)
 			_ = fReader.Close()
 		}
 	}
 
 	if len(decompressed) > 0 {
 		body = decompressed
-		if h.cfg.Mode == "json" || h.cfg.KVExtract {
-			log.Printf("[HTTP DEBUG] Successfully decompressed payload (%d -> %d bytes)", len(body), len(decompressed))
-		}
 	}
 
 	stats.IncMessagesReceived(h.Name(), len(body))

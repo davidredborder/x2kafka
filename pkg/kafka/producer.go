@@ -9,7 +9,6 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
-	"x2kafka/pkg/config"
 	"x2kafka/pkg/stats"
 )
 
@@ -21,16 +20,26 @@ type Message struct {
 	Timestamp time.Time
 }
 
+// ProducerConfig defines the configuration parameters for the Kafka producer.
+type ProducerConfig struct {
+	Brokers        []string
+	Topic          string
+	BatchSize      int
+	BatchTimeoutMS int
+	Async          bool
+	Compression    string
+}
+
 type Producer struct {
 	writers map[string]*kafka.Writer
 	brokers []string
-	cfg     *config.Config
+	cfg     ProducerConfig
 	mu      sync.Mutex
 	ctx     context.Context
 	cancel  context.CancelFunc
 }
 
-func NewProducer(cfg *config.Config) (*Producer, error) {
+func NewProducer(cfg ProducerConfig) (*Producer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Producer{
 		writers: make(map[string]*kafka.Writer),

@@ -1,6 +1,6 @@
 PACKAGE_NAME?=	x2kafka
 
-VERSION?=	$(shell git describe --abbrev=6 --tags HEAD --always 2>/dev/null || cat ../../VERSION 2>/dev/null || echo "1.0.0")
+VERSION?=	$(shell cat ../../VERSION 2>/dev/null || git describe --abbrev=6 --tags HEAD --always 2>/dev/null | sed 's/-/_/g' || echo "1.0.0")
 
 BUILD_NUMBER?= 1
 
@@ -23,7 +23,7 @@ archive: SOURCES
 
 build_prepare: archive
 	mkdir -p $(RESULT_DIR)
-	rm -f $(RESULT_DIR)/$(PACKAGE_NAME)*.rpm
+	rm -f $(RESULT_DIR)/$(PACKAGE_NAME)*.rpm $(RESULT_DIR)/kafka2x*.rpm
 
 srpm: build_prepare
 	/usr/bin/mock \
