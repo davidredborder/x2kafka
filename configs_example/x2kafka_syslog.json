@@ -1,0 +1,36 @@
+{
+  "debug": false,
+  "brokers": [
+    "localhost:9092"
+  ],
+  "topic": "rb_syslog",
+  "client_id": "x2kafka-syslog",
+  "async": true,
+  "num_workers": 8,
+  "channel_buffer_size": 50000,
+  "socket_buffer_bytes": 8388608,
+  "compression": "lz4",
+  "stats_port": 7979,
+  "stats_bind": "127.0.0.1",
+  "stats_socket": "/run/x2kafka/syslog.sock",
+  "listeners": [
+    {
+      "name": "syslog-collector",
+      "proto": "syslog",
+      "bind": "0.0.0.0",
+      "port": 514,
+      "mode": "syslog",
+      "topic": "rb_syslog",
+      "kv_extract": true,
+      "cef_extract": true,
+      "schema_standardization": true,
+      "regex_patterns": [
+        "user=(?P<user>\\S+)",
+        "Failed password for (invalid user )?(?P<user>\\S+) from (?P<src_ip>\\S+) port (?P<src_port>\\d+)"
+      ],
+      "enrichment": {
+        "service": "syslog"
+      }
+    }
+  ]
+}

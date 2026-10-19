@@ -1,0 +1,32 @@
+{
+  "debug": false,
+  "brokers": [
+    "localhost:9092"
+  ],
+  "topic": "rb_events",
+  "client_id": "x2kafka-http2k",
+  "async": true,
+  "num_workers": 8,
+  "channel_buffer_size": 50000,
+  "stats_port": 7980,
+  "stats_bind": "127.0.0.1",
+  "stats_socket": "/run/x2kafka/http2k.sock",
+  "listeners": [
+    {
+      "name": "http2k-listener",
+      "proto": "http",
+      "bind": "0.0.0.0",
+      "port": 7980,
+      "mode": "json",
+      "enrichment_key": "sensor_uuid",
+      "enrichment_map": {
+        "bd2fe2c3-d0ff-4c27-aef9-122b698239b9": {
+          "index_partitions": 5,
+          "index_replicas": 1,
+          "proxy_uuid": "bd2fe2c3-d0ff-4c27-aef9-122b698239b9",
+          "sensor_uuid": "bd2fe2c3-d0ff-4c27-aef9-122b698239b9"
+        }
+      }
+    }
+  ]
+}

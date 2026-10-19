@@ -1,0 +1,17 @@
+[Unit]
+Description=x2kafka HTTP2K REST Bulk Ingestion Service (HTTP port 7980)
+After=network.target kafka.service
+
+[Service]
+Type=simple
+User=root
+RuntimeDirectory=x2kafka
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/x2kafka /etc/x2kafka/http2k.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5s
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

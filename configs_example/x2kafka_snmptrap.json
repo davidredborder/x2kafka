@@ -1,0 +1,33 @@
+{
+  "debug": false,
+  "brokers": [
+    "localhost:9092"
+  ],
+  "topic": "rb_trap",
+  "client_id": "x2kafka-snmptrap",
+  "async": true,
+  "num_workers": 8,
+  "channel_buffer_size": 50000,
+  "socket_buffer_bytes": 8388608,
+  "stats_port": 7981,
+  "stats_bind": "127.0.0.1",
+  "stats_socket": "/run/x2kafka/snmptrap.sock",
+  "mib_dirs": [
+    "/usr/share/snmp/mibs",
+    "/var/lib/snmp/mibs",
+    "/etc/redborder/mibs"
+  ],
+  "listeners": [
+    {
+      "name": "snmptrap-listener",
+      "proto": "snmptrap",
+      "bind": "0.0.0.0",
+      "port": 162,
+      "topic": "rb_trap",
+      "allowed_ips": [
+        "127.0.0.1",
+        "10.0.0.0/8"
+      ]
+    }
+  ]
+}

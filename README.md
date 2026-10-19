@@ -233,3 +233,52 @@ sudo systemctl enable --now kafka2x
 sudo systemctl status kafka2x
 ```
 
+---
+
+## Production Best Practice: Dedicated Services per Protocol
+
+While `x2kafka` can run all listeners inside a single process, the **recommended production architecture** is to run dedicated systemd services for each protocol (`syslog`, `http2k`, `snmptrap`).
+
+### Why Separate Services?
+1. **Isolated Fault Domains**: A spike in Syslog traffic or a slow network client won't affect HTTP2K or SNMP Trap ingestion.
+2. **Independent Restarts & Upgrades**: Restarting or reloading one collector (e.g. `systemctl restart x2kafka-syslog`) does not interrupt connections to other endpoints.
+3. **Dedicated Tuning & Resource Limits**: Allows assigning custom CPU quotas, worker thread counts, memory limits (`MemoryMax=`), or scheduling priorities per service in systemd.
+4. **Independent Monitoring**: Each service runs with its own telemetry port and IPC socket, allowing independent throughput and error tracking.
+
+### Example Service Files & Configurations
+
+Example systemd units and configs are provided in the repository:
+- **Syslog Service (UDP/TCP 514)**:
+  - Unit: [`resources/systemd/examples/x2kafka-syslog.service`](resources/systemd/examples/x2kafka-syslog.service)
+  - Config: [`configs_example/x2kafka_syslog.json`](configs_example/x2kafka_syslog.json) (`stats_port: 7979`, `stats_socket: /run/x2kafka/syslog.sock`)
+- **HTTP2K Service (HTTP 7980)**:
+  - Unit: [`resources/systemd/examples/x2kafka-http2k.service`](resources/systemd/examples/x2kafka-http2k.service)
+  - Config: [`configs_example/x2kafka_http2k.json`](configs_example/x2kafka_http2k.json) (`stats_port: 7980`, `stats_socket: /run/x2kafka/http2k.sock`)
+- **Direct SNMP Trap Receiver (UDP 162)**:
+  - Unit: [`resources/systemd/examples/x2kafka-snmptrap.service`](resources/systemd/examples/x2kafka-snmptrap.service)
+  - Config: [`configs_example/x2kafka_snmptrap.json`](configs_example/x2kafka_snmptrap.json) (`stats_port: 7981`, `stats_socket: /run/x2kafka/snmptrap.sock`)
+
+### How to Deploy Dedicated Services:
+
+```bash
+# 1. Copy the configuration files to /etc/x2kafka/
+sudo cp configs_example/x2kafka_syslog.json /etc/x2kafka/syslog.json
+sudo cp configs_example/x2kafka_http2k.json /etc/x2kafka/http2k.json
+sudo cp configs_example/x2kafka_snmptrap.json /etc/x2kafka/snmptrap.json
+
+# 2. Copy the example systemd unit files to /etc/systemd/system/
+sudo cp resources/systemd/examples/x2kafka-syslog.service /etc/systemd/system/
+sudo cp resources/systemd/examples/x2kafka-http2k.service /etc/systemd/system/
+sudo cp resources/systemd/examples/x2kafka-snmptrap.service /etc/systemd/system/
+
+# 3. Reload systemd and enable the services you require
+sudo systemctl daemon-reload
+sudo systemctl enable --now x2kafka-syslog
+sudo systemctl enable --now x2kafka-http2k
+sudo systemctl enable --now x2kafka-snmptrap
+```
+
+> [!IMPORTANT]
+> When running multiple `x2kafka` instances concurrently on the same host, ensure that each configuration specifies a unique `stats_port` and `stats_socket` (as pre-configured in the example files) to prevent IPC socket or TCP port collisions.
+
+

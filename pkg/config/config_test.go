@@ -49,6 +49,20 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.Listeners[0].Name != "test_fifo" {
 		t.Errorf("Expected listener name 'test_fifo', got '%s'", cfg.Listeners[0].Name)
 	}
+
+	for _, path := range []string{
+		"../../configs_example/x2kafka_syslog.json",
+		"../../configs_example/x2kafka_http2k.json",
+		"../../configs_example/x2kafka_snmptrap.json",
+	} {
+		mCfg, err := LoadConfig(path)
+		if err != nil {
+			t.Fatalf("Failed to load modular config %s: %v", path, err)
+		}
+		if len(mCfg.Listeners) == 0 {
+			t.Errorf("Expected at least 1 listener in %s", path)
+		}
+	}
 }
 
 func TestLoadEgressConfig(t *testing.T) {

@@ -1,0 +1,17 @@
+[Unit]
+Description=x2kafka Direct SNMP Trap Receiver Service (UDP port 162)
+After=network.target kafka.service
+
+[Service]
+Type=simple
+User=root
+RuntimeDirectory=x2kafka
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/x2kafka /etc/x2kafka/snmptrap.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5s
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

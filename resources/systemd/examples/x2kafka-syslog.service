@@ -1,0 +1,17 @@
+[Unit]
+Description=x2kafka Syslog Ingestion Service (UDP/TCP port 514)
+After=network.target kafka.service
+
+[Service]
+Type=simple
+User=root
+RuntimeDirectory=x2kafka
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/x2kafka /etc/x2kafka/syslog.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5s
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target
