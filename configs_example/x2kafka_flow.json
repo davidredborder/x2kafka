@@ -1,0 +1,59 @@
+{
+  "debug": false,
+  "brokers": ["kafka.service:9092"],
+  "topic": "rb_flow",
+  "num_workers": 16,
+  "channel_buffer_size": 50000,
+  "socket_buffer_bytes": 8388608,
+  "stats_port": 7979,
+  "allowed_ips": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+  "home_nets": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+  "listeners": [
+    {
+      "name": "netflow-collector",
+      "proto": "netflow",
+      "bind": "0.0.0.0",
+      "port": 2055,
+      "topic": "rb_flow",
+      "template_ttl_seconds": 1800,
+      "renormalize_sampling": true,
+      "span_port": false,
+      "exclude_fields": ["tcp_flags", "duration"],
+      "enrichment_key": "sensor_ip",
+      "enrichment_map": {
+        "10.10.10.1:100": {
+          "sensor_uuid": "bd2fe2c3-d0ff-4c27-aef9-122b698239b9",
+          "sensor_name": "edge-router-01-domain-100"
+        },
+        "10.10.10.1": {
+          "observations_id": {
+            "200": {
+              "sensor_uuid": "c33fe2c3-d0ff-4c27-aef9-122b698239c0",
+              "sensor_name": "edge-router-01-domain-200"
+            },
+            "default": {
+              "sensor_uuid": "bd2fe2c3-d0ff-4c27-aef9-122b698239b9",
+              "sensor_name": "edge-router-01"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "sflow-collector",
+      "proto": "sflow",
+      "bind": "0.0.0.0",
+      "port": 6343,
+      "topic": "sflow",
+      "renormalize_sampling": true,
+      "allowed_ips": ["10.0.0.0/8"],
+      "enrichment_key": "sensor_ip",
+      "enrichment_map": {
+        "10.20.20.1": {
+          "sensor_uuid": "e55fe2c3-d0ff-4c27-aef9-122b698239e5",
+          "sensor_name": "core-switch-01"
+        }
+      }
+    }
+  ]
+}

@@ -23,6 +23,8 @@ type Config struct {
 	SocketBufferBytes int              `json:"socket_buffer_bytes,omitempty"`  // OS Socket receive buffer size (default 8MB)
 	AllowedIPs        []string         `json:"allowed_ips,omitempty"`          // Global IP allowlist / CIDR blocks (e.g. ["10.1.33.0/24", "192.168.10.1"])
 	BlacklistIPs      []string         `json:"blacklist_ips,omitempty"`        // Global IP blacklist / CIDR blocks (e.g. ["192.168.101.3"])
+	HomeNets          []string         `json:"home_nets,omitempty"`            // Global home networks CIDRs (e.g. ["10.0.0.0/8", "192.168.0.0/16"])
+	HomeNet           []string         `json:"home_net,omitempty"`             // Alias for home_nets
 	StatsPort         int              `json:"stats_port,omitempty"`           // HTTP port for /stats endpoint
 	StatsBind         string           `json:"stats_bind,omitempty"`           // Bind IP for stats endpoint
 	StatsSocket       string           `json:"stats_socket,omitempty"`         // UNIX socket path for stats query (e.g. /run/x2kafka/x2kafka.sock)
@@ -76,6 +78,12 @@ type ListenerConfig struct {
 	RegexPatterns        []string                          `json:"regex_patterns,omitempty"`        // Named regex extraction patterns
 	MaxMsgSize           int                               `json:"max_msg_size,omitempty"`
 	SocketBufferBytes    int                               `json:"socket_buffer_bytes,omitempty"`
+	ExcludeFields        []string                          `json:"exclude_fields,omitempty"`        // Flow fields to omit from JSON output
+	TemplateTTLSeconds   int                               `json:"template_ttl_seconds,omitempty"`  // NetFlow/IPFIX template expiration in seconds
+	RenormalizeSampling  *bool                             `json:"renormalize_sampling,omitempty"`  // Renormalize sFlow/NetFlow counters by sampling rate
+	HomeNets             []string                          `json:"home_nets,omitempty"`             // Home network CIDRs for LAN/WAN orientation
+	HomeNet              []string                          `json:"home_net,omitempty"`              // Alias for home_nets
+	SpanPort             bool                              `json:"span_port,omitempty"`             // Mirror/SPAN port mode (prefers ingress MACs)
 }
 
 // LoadConfig reads and parses a JSON config file.
@@ -155,6 +163,35 @@ func LoadConfig(filename string) (*Config, error) {
 		}
 		if len(l.BlacklistIPs) == 0 && len(cfg.BlacklistIPs) > 0 {
 			l.BlacklistIPs = cfg.BlacklistIPs
+		}
+		// Inherit global home_nets if listener does not override
+		if len(l.HomeNets) == 0 && len(l.HomeNet) > 0 {
+			l.HomeNets = l.HomeNet
+		}
+		if len(l.HomeNets) == 0 {
+			if len(cfg.HomeNets) > 0 {
+				l.HomeNets = cfg.HomeNets
+			} else if len(cfg.HomeNet) > 0 {
+				l.HomeNets = cfg.HomeNet
+			}
+		}
+
+		// Set default ports and topics for flow protocols if unset
+		switch l.Proto {
+		case "flow", "netflow", "netflow_udp", "ipfix":
+			if l.Port == 0 {
+				l.Port = 2055
+			}
+			if l.Topic == "" {
+				l.Topic = "rb_flow"
+			}
+		case "sflow", "sflow_udp":
+			if l.Port == 0 {
+				l.Port = 6343
+			}
+			if l.Topic == "" {
+				l.Topic = "rb_flow"
+			}
 		}
 
 		// Support "syslog" (UDP + TCP), "snmptrap" (UDP + TCP), or comma-separated protos (e.g. "syslog_udp,syslog_tcp")

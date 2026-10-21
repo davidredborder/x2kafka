@@ -90,6 +90,8 @@ func createListener(lcfg config.ListenerConfig) (listener.Listener, error) {
 		return listener.NewSyslogListener(lcfg), nil
 	case "snmptrap_udp", "snmptrap_tcp":
 		return listener.NewSNMPTrapListener(lcfg), nil
+	case "flow", "netflow", "netflow_udp", "ipfix", "sflow", "sflow_udp":
+		return listener.NewFlowListener(lcfg), nil
 	case "http", "https":
 		return listener.NewHTTPListener(lcfg), nil
 	default:

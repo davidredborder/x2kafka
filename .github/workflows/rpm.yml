@@ -26,7 +26,9 @@ jobs:
         shell: bash
 
       - name: Run Docker Container
-        run: docker run --privileged -d --name builder --network host rockylinux:9 /bin/sleep infinity
+        run: |
+          docker rm -f builder 2>/dev/null || true
+          docker run --privileged -d --name builder --network host rockylinux:9 /bin/sleep infinity
 
       - name: Install build tools RPM
         run: |
@@ -76,11 +78,12 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && env.ACT != 'true'
         with:
           files: |
             ./rpms/*
             x2kafka-sbom.spdx.json
           tag_name: ${{ env.TAG }}
+          token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

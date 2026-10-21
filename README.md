@@ -18,6 +18,20 @@ This repository provides two high-performance streaming daemons for the redBorde
 - **UNIX Domain Sockets**: Supports both `unix` (Stream, SOCK_STREAM) and `unixgram` (Datagram, SOCK_DGRAM) sockets.
 - **FIFO (Named Pipes)**: Continuously reads from Linux FIFOs with auto-reconnect handling for external writer processes.
 - **Direct SNMP Trap Receiver**: Supports direct SNMP v1/v2c/v3 trap reception on UDP 162 (`snmptrap_udp`) with automatic numeric OID to MIB name translation using dynamic MIB directories (`mib_dirs`).
+- **Standards-Compliant Flow Ingestion (`proto: "flow"`, `"netflow"`, `"ipfix"`, `"sflow"`)**:
+  - **Multi-Version Auto-Detection**: Specifying `"proto": "netflow"` (or `"flow"`) on UDP 2055 automatically detects whether each incoming packet is NetFlow v5, v9, or IPFIX by inspecting the wire header. Devices sending different versions can share the same port.
+  - **NetFlow v5 (RFC 1883)**: Fixed-format 5-tuple flow records (`type: "netflowv5"`).
+  - **NetFlow v9 (RFC 3954)**: 100% dynamic template and options decoding (`type: "netflowv9"`).
+  - **IPFIX / NetFlow v10 (RFC 7011 / 7012)**: Dynamic template decoding with variable-length elements and enterprise Information Elements (`type: "netflowv10"`).
+  - **sFlow v5 (sFlow.org)**: Ingests Flow Samples (Format 1) and Expanded Flow Samples (Format 3) on UDP 6343 (`type: "sflow"`).
+  - **100% Flat JSON Compatibility**: Drop-in replacement for `f2k` and `redborder-flow-agent`. Emits flat JSON records (no nested objects) for Druid/ClickHouse ingestion, with Cisco NBAR binary applications decoded into string `engine:app` identifiers (e.g. `"3:123"`).
+  - **RedBorder Directional Model A (`home_nets`)**: Evaluates traffic orientation against configured `home_nets` CIDR blocks (defaults to RFC 1918/6598/4193). For downstream flows (WAN $\to$ LAN), `lan_ip` is automatically oriented to the internal host, with `direction` set to `"upstream"`, `"downstream"`, or `"internal"`.
+  - **L7 & Network Layer Metadata**: Decodes HTTP User-Agent (`http_user_agent`), URL (`http_url`), Host (`http_host`), Referer (`http_referer`), human-readable TCP flags (`tcp_flags`, e.g. `"SYN|ACK"`), and TTL (`src_ttl`, `dst_ttl`) from Cisco AVC/NBAR2, IPFIX, and sFlow.
+  - **Output Schema & `sensor_ip`**: Emits normalized flow JSON with `sensor_ip` automatically populated with the exporter's IP address, alongside `lan_ip`, `wan_ip`, `lan_l4_port`, `wan_l4_port`, `l4_proto`, `bytes`, `pkts`, and timestamps.
+  - **Sampling Renormalization (`renormalize_sampling`)**: Automatically scales byte and packet volumes by the flow sampling rate so downstream metrics reflect true wire volume.
+  - **SPAN Port Mode (`span_port`)**: Configurable per-listener boolean. When enabled (`"span_port": true`), ingress MAC addresses are prioritized over post-routed gateway MACs (`postDestinationMacAddress`), matching mirrored SPAN port tap behavior.
+  - **Observation ID Enrichment (`observation_domain_id` / `observations_id`)**: Extracts NetFlow v9 Source ID and IPFIX Observation Domain ID into `observation_domain_id`. Supports hierarchical enrichment lookup matching both flat `<ip>:<observation_id>` keys and nested Chef `observations_id` maps.
+  - **Field Exclusion (`exclude_fields`)**: Allows dropping specified flow fields from the emitted JSON records before Kafka serialization.
 - **IP Security & Subnet Filtering**: Granular IP allowlisting (`allowed_ips`) and blacklisting (`blacklist_ips`) supporting single IPs and CIDR subnet blocks globally or per listener.
 - **Message Splitting & Field Extraction**: Extract structured data from raw log strings using Key-Value parsing (`kv_extract`), CEF security headers (`cef_extract`), or custom named Regex patterns (`regex_patterns`).
 - **Schema Standardization**: Map vendor-specific log keys (e.g., `src`, `srcip`, `source_ip`) to unified redBorder schema keys (`src_ip`, `dst_ip`, `src_port`, `dst_port`, `transport`, `username`) automatically via `schema_standardization`.
@@ -107,10 +121,97 @@ This repository provides two high-performance streaming daemons for the redBorde
       "bind": "0.0.0.0",
       "port": 162,
       "topic": "rb_trap"
+    },
+    {
+      "name": "netflow-listener",
+      "proto": "netflow",
+      "bind": "0.0.0.0",
+      "port": 2055,
+      "topic": "rb_flow",
+      "home_nets": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+      "renormalize_sampling": true,
+      "span_port": false,
+      "exclude_fields": ["tcp_flags", "duration"],
+      "allowed_ips": ["10.0.0.0/8", "192.168.1.0/24"],
+      "enrichment_key": "sensor_ip",
+      "enrichment_map": {
+        "10.10.10.1": {
+          "observations_id": {
+            "100": { "sensor_uuid": "bd2fe2c3-d0ff-4c27-aef9-122b698239b9", "sensor_name": "router-subdomain-100" },
+            "default": { "sensor_uuid": "bd2fe2c3-d0ff-4c27-aef9-122b698239b9", "sensor_name": "router-default" }
+          }
+        }
+      }
+    },
+    {
+      "name": "sflow-listener",
+      "proto": "sflow",
+      "bind": "0.0.0.0",
+      "port": 6343,
+      "topic": "rb_flow",
+      "home_nets": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+      "renormalize_sampling": true,
+      "allowed_ips": ["10.0.0.0/8"],
+      "enrichment_key": "sensor_ip",
+      "enrichment_map": {
+        "10.20.20.1": {
+          "sensor_uuid": "e55fe2c3-d0ff-4c27-aef9-122b698239e5",
+          "sensor_name": "switch-core-01"
+        }
+      }
     }
   ]
 }
 ```
+
+#### Emitted Flow JSON Schema (`rb_flow`)
+
+100% flat JSON compatible with `f2k` and Druid/ClickHouse schemas:
+
+```json
+{
+  "type": "netflowv10",
+  "sensor_ip": "10.1.50.20",
+  "flow_sequence": "57534",
+  "ip_protocol_version": 4,
+  "l4_proto": 17,
+  "direction": "upstream",
+  "application_id_name": "3:123",
+  "engine_id_name": "3",
+  "biflow_direction": "initiator",
+  "flow_end_reason": "idle timeout",
+  "lan_ip": "10.1.32.17",
+  "wan_ip": "162.159.200.123",
+  "lan_l4_port": 50024,
+  "wan_l4_port": 123,
+  "lan_interface": 13,
+  "lan_interface_name": "13",
+  "wan_interface": 1,
+  "wan_interface_name": "1",
+  "client_mac": "2c:f0:5d:0b:33:f0",
+  "observation_domain_id": 100,
+  "tcp_flags": "SYN|ACK",
+  "src_ttl": 64,
+  "dst_ttl": 58,
+  "http_user_agent": "Mozilla/5.0 (X11; Linux x86_64) ...",
+  "http_url": "https://example.com/api/v1",
+  "http_host": "example.com",
+  "bytes": 76,
+  "pkts": 1,
+  "timestamp": 1792523691
+}
+```
+*Note: `"type"` is automatically set to `"netflowv5"`, `"netflowv9"`, `"netflowv10"` (IPFIX), or `"sflow"` based on the incoming datagram. Model A automatically ensures `"lan_ip"` is the internal `home_nets` IP and sets `"direction"` to `"upstream"` or `"downstream"`. HTTP metadata (`http_user_agent`, `http_url`, `http_host`) is decoded from Cisco AVC/NBAR2 or sFlow payloads when present.*
+
+##### Flow Enrichment Resolution Order
+When `enrichment_map` is configured on a flow listener:
+1. `<exporter_ip>:<observation_id>` (e.g. `"10.1.50.20:100"`)
+2. `<exporter_ip>` (or key defined by `enrichment_key`, e.g. `"10.1.50.20"`)
+3. Nested Chef-style `observations_id` within the matched IP (`"10.1.50.20": { "observations_id": { "100": { ... }, "default": { ... } } }`)
+4. `"default"` entry in `enrichment_map`
+
+*If an exporter IP is defined directly without `observations_id` (e.g. `"10.1.50.20": { "sensor_uuid": "...", "sensor_name": "..." }`), it applies cleanly to all flows from that sensor IP without any special configuration needed.*
+
 
 ### 2. `kafka2x` Egress Config (`/etc/kafka2x/config.json`)
 

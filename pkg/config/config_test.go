@@ -54,6 +54,7 @@ func TestLoadConfig(t *testing.T) {
 		"../../configs_example/x2kafka_syslog.json",
 		"../../configs_example/x2kafka_http2k.json",
 		"../../configs_example/x2kafka_snmptrap.json",
+		"../../configs_example/x2kafka_flow.json",
 	} {
 		mCfg, err := LoadConfig(path)
 		if err != nil {
@@ -62,6 +63,46 @@ func TestLoadConfig(t *testing.T) {
 		if len(mCfg.Listeners) == 0 {
 			t.Errorf("Expected at least 1 listener in %s", path)
 		}
+	}
+}
+
+func TestLoadConfig_HomeNetsInheritance(t *testing.T) {
+	content := `{
+		"home_nets": ["10.0.0.0/8", "192.168.0.0/16"],
+		"listeners": [
+			{
+				"name": "inherit_flow",
+				"proto": "netflow"
+			},
+			{
+				"name": "override_flow",
+				"proto": "sflow",
+				"home_nets": ["172.16.0.0/12"]
+			}
+		]
+	}`
+
+	tmpfile, err := os.CreateTemp("", "config_homenet_test_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write([]byte(content)); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	tmpfile.Close()
+
+	cfg, err := LoadConfig(tmpfile.Name())
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if len(cfg.Listeners[0].HomeNets) != 2 || cfg.Listeners[0].HomeNets[0] != "10.0.0.0/8" {
+		t.Errorf("Expected inherited home_nets, got %v", cfg.Listeners[0].HomeNets)
+	}
+	if len(cfg.Listeners[1].HomeNets) != 1 || cfg.Listeners[1].HomeNets[0] != "172.16.0.0/12" {
+		t.Errorf("Expected overridden home_nets, got %v", cfg.Listeners[1].HomeNets)
 	}
 }
 
